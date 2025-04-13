@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MarlowOS - Webcam Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        marlow: {
+                            bg: "#000000",
+                            card: "#111111",
+                            accent: "#00FFFF",
+                            text: "#ffffff",
+                            muted: "#888888"
+                        }
+                    }
+                },
+                fontFamily: {
+                    'sans': ['Inter', 'ui-sans-serif', 'system-ui'],
+                    'mono': ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular'],
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: 'Inter', sans-serif;
+        }
+        .video-container {
+            aspect-ratio: 16/9;
+            overflow: hidden;
+            border-radius: 0.5rem;
+            position: relative;
+        }
+        .webcam-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #camera-placeholder {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            background-color: #111111;
+            color: #888888;
+        }
+        .marlow-card {
+            background-color: #111111;
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        <!-- Header -->
+        <div class="mb-6 flex justify-between items-center">
+            <h1 class="text-4xl font-bold text-white tracking-tight">
+                MARLOW<span class="text-cyan-500">OS</span>
+            </h1>
+            <a href="/" class="inline-flex items-center px-4 py-2 bg-marlow-card hover:bg-neutral-900 rounded-lg text-white transition">
+                <i class="fas fa-arrow-left mr-2"></i>
+                Back to Main
+            </a>
+        </div>
+
+        <div class="mb-8">
+            <h3 class="text-xl font-bold uppercase tracking-wide mb-4">WEBCAM TEST</h3>
+            
+            <div class="marlow-card p-6">
+                <!-- Webcam Container -->
+                <div class="video-container bg-black shadow-lg mb-4">
+                    <video id="webcam-feed" class="webcam-feed" autoplay playsinline muted></video>
+                    <div id="camera-placeholder" class="text-center p-5">
+                        <i class="fas fa-camera-slash text-4xl mb-4 text-neutral-500"></i>
+                        <h3 class="text-xl font-semibold text-neutral-400">Camera is off</h3>
+                        <p class="text-neutral-500 mt-2">Click "Start Webcam" to begin</p>
+                    </div>
+                </div>
+                
+                <!-- Controls -->
+                <div class="flex gap-4 justify-center mt-4">
+                    <button id="start-webcam" class="inline-flex items-center px-6 py-3 bg-marlow-accent hover:bg-cyan-600 rounded-lg text-black font-medium transition">
+                        <i class="fas fa-video mr-2"></i>
+                        Start Webcam
+                    </button>
+                    <button id="stop-webcam" class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg text-white transition" disabled>
+                        <i class="fas fa-video-slash mr-2"></i>
+                        Stop Webcam
+                    </button>
+                </div>
+                
+                <!-- Camera Settings -->
+                <div class="mt-8">
+                    <h3 class="text-lg font-medium mb-4 text-white">Camera Settings</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="camera-select" class="block text-sm font-medium text-neutral-400 mb-2">Camera Source</label>
+                            <select id="camera-select" class="w-full bg-black border border-neutral-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                                <option value="">Loading cameras...</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label for="resolution-select" class="block text-sm font-medium text-neutral-400 mb-2">Resolution</label>
+                            <select id="resolution-select" class="w-full bg-black border border-neutral-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                                <option value="640,480">640x480</option>
+                                <option value="1280,720" selected>1280x720 (HD)</option>
+                                <option value="1920,1080">1920x1080 (Full HD)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Status Message -->
+                <div id="status-message" class="mt-4 p-3 bg-black rounded-lg text-neutral-400 text-sm"></div>
+            </div>
+            
+            <div class="mt-6 text-center text-neutral-500">
+                <p>This page allows you to test your webcam or OBS virtual camera for use with MarlowOS.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Socket.IO connection
+        const socket = io();
+        
+        // DOM Elements
+        const webcamFeed = document.getElementById('webcam-feed');
+        const cameraPlaceholder = document.getElementById('camera-placeholder');
+        const startWebcamBtn = document.getElementById('start-webcam');
+        const stopWebcamBtn = document.getElementById('stop-webcam');
+        const cameraSelect = document.getElementById('camera-select');
+        const resolutionSelect = document.getElementById('resolution-select');
+        const statusMessage = document.getElementById('status-message');
+        
+        // Variables
+        let stream = null;
+        let mediaRecorder = null;
+        let isStreaming = false;
+        let availableCameras = [];
+        
+        // Show status message
+        function showStatus(message, type = 'info') {
+            statusMessage.textContent = message;
+            statusMessage.className = 'mt-4 p-3 rounded-lg text-sm';
+            
+            if (type === 'error') {
+                statusMessage.classList.add('bg-red-900', 'text-red-300');
+            } else if (type === 'success') {
+                statusMessage.classList.add('bg-green-900', 'text-green-300');
+            } else {
+                statusMessage.classList.add('bg-black', 'text-neutral-400');
+            }
+        }
+        
+        // Get available cameras
+        async function getAvailableCameras() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                availableCameras = devices.filter(device => device.kind === 'videoinput');
+                
+                // Clear and populate camera select
+                cameraSelect.innerHTML = '';
+                
+                if (availableCameras.length === 0) {
+                    cameraSelect.innerHTML = '<option value="">No cameras found</option>';
+                    showStatus('No cameras detected on your device', 'error');
+                    return;
+                }
+                
+                availableCameras.forEach((camera, index) => {
+                    const option = document.createElement('option');
+                    option.value = camera.deviceId;
+                    option.text = camera.label || `Camera ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+                
+                showStatus(`Found ${availableCameras.length} camera(s)`);
+            } catch (error) {
+                console.error('Error getting cameras:', error);
+                showStatus('Error accessing cameras: ' + error.message, 'error');
+            }
+        }
+        
+        // Start webcam stream
+        async function startWebcam() {
+            try {
+                // Get selected resolution
+                const [width, height] = resolutionSelect.value.split(',').map(Number);
+                
+                // Get selected camera or default to first camera
+                const videoConstraints = {
+                    width: { ideal: width },
+                    height: { ideal: height }
+                };
+                
+                if (cameraSelect.value) {
+                    videoConstraints.deviceId = { exact: cameraSelect.value };
+                }
+                
+                // Get user media
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: videoConstraints,
+                    audio: false
+                });
+                
+                // Set the stream as source for video element
+                webcamFeed.srcObject = stream;
+                
+                // Show video and hide placeholder
+                webcamFeed.style.display = 'block';
+                cameraPlaceholder.style.display = 'none';
+                
+                // Update button states
+                startWebcamBtn.disabled = true;
+                stopWebcamBtn.disabled = false;
+                
+                // Notify server that webcam is started
+                socket.emit('start_webcam');
+                
+                // Set up frame capturing if needed
+                setupFrameCapture();
+                
+                isStreaming = true;
+                showStatus('Webcam started successfully', 'success');
+            } catch (error) {
+                console.error('Error starting webcam:', error);
+                showStatus('Error starting webcam: ' + error.message, 'error');
+            }
+        }
+        
+        // Stop webcam stream
+        function stopWebcam() {
+            if (stream) {
+                // Stop all tracks
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+                
+                // Hide video and show placeholder
+                webcamFeed.style.display = 'none';
+                cameraPlaceholder.style.display = 'flex';
+                webcamFeed.srcObject = null;
+                
+                // Update button states
+                startWebcamBtn.disabled = false;
+                stopWebcamBtn.disabled = true;
+                
+                // Notify server that webcam is stopped
+                socket.emit('stop_webcam');
+                
+                isStreaming = false;
+                showStatus('Webcam stopped');
+            }
+        }
+        
+        // Setup frame capture for face recognition
+        function setupFrameCapture() {
+            // Create a canvas element for frame capture
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Set appropriate dimensions
+            canvas.width = webcamFeed.videoWidth;
+            canvas.height = webcamFeed.videoHeight;
+            
+            // Capture frames at regular intervals if needed
+            /* 
+            setInterval(() => {
+                if (isStreaming && webcamFeed.videoWidth > 0) {
+                    // Draw the current video frame on the canvas
+                    ctx.drawImage(webcamFeed, 0, 0, canvas.width, canvas.height);
+                    
+                    // Convert to base64 and send to server
+                    const imageData = canvas.toDataURL('image/jpeg', 0.7);
+                    const base64Data = imageData.split(',')[1];
+                    
+                    // Send frame to server
+                    socket.emit('webcam_frame', { image: base64Data });
+                }
+            }, 100); // Capture at 10fps
+            */
+        }
+        
+        // Event Listeners
+        startWebcamBtn.addEventListener('click', startWebcam);
+        stopWebcamBtn.addEventListener('click', stopWebcam);
+        
+        // Camera selection change
+        cameraSelect.addEventListener('change', () => {
+            if (isStreaming) {
+                // Restart stream with new camera
+                stopWebcam();
+                startWebcam();
+            }
+        });
+        
+        // Resolution selection change
+        resolutionSelect.addEventListener('change', () => {
+            if (isStreaming) {
+                // Restart stream with new resolution
+                stopWebcam();
+                startWebcam();
+            }
+        });
+        
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            if (isStreaming) {
+                stopWebcam();
+            }
+        });
+        
+        // Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            // Initial status message
+            showStatus('Please select a camera and click "Start Webcam"');
+            
+            // Get available cameras
+            getAvailableCameras();
+            
+            // Request permissions explicitly to get camera labels
+            if (!navigator.permissions) {
+                // Older browsers might not have the permissions API
+                navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    // Stop the stream immediately, we just needed it for permissions
+                    stream.getTracks().forEach(track => track.stop());
+                    // Now get the cameras with labels
+                    getAvailableCameras();
+                })
+                .catch(error => {
+                    console.error('Permission error:', error);
+                    showStatus('Camera permission denied: ' + error.message, 'error');
+                });
+            } else {
+                navigator.permissions.query({ name: 'camera' })
+                .then(permissionStatus => {
+                    if (permissionStatus.state === 'granted') {
+                        getAvailableCameras();
+                    } else {
+                        // We need to request access
+                        navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(stream => {
+                            // Stop the stream immediately
+                            stream.getTracks().forEach(track => track.stop());
+                            // Now get the cameras with labels
+                            getAvailableCameras();
+                        })
+                        .catch(error => {
+                            console.error('Permission error:', error);
+                            showStatus('Camera permission denied: ' + error.message, 'error');
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Permission query error:', error);
+                    // Fallback to direct getUserMedia request
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                        stream.getTracks().forEach(track => track.stop());
+                        getAvailableCameras();
+                    })
+                    .catch(error => {
+                        showStatus('Camera permission denied: ' + error.message, 'error');
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html> 

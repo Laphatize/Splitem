@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tello Drone Event Monitor</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .filter-section {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .btn-primary {
+            background-color: #3498db;
+            color: white;
+        }
+        .btn-danger {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #2980b9;
+        }
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+        .event-list {
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .event-card {
+            border-bottom: 1px solid #eee;
+            padding: 15px;
+            transition: background-color 0.2s;
+            cursor: pointer;
+        }
+        .event-card:hover {
+            background-color: #f9f9f9;
+        }
+        .event-card h3 {
+            margin: 0 0 10px 0;
+            color: #3498db;
+        }
+        .event-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-bottom: 10px;
+        }
+        .event-contents {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .event-card.expanded .event-contents {
+            max-height: 500px;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 0;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            background-color: #d4edda;
+            color: #155724;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .event-type-filter {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            min-width: 150px;
+        }
+        .refresh-animation {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .event-type-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        /* Event type colors */
+        .event-startup { background-color: #9b59b6; color: white; }
+        .event-takeoff { background-color: #2ecc71; color: white; }
+        .event-land { background-color: #3498db; color: white; }
+        .event-emergency_stop { background-color: #e74c3c; color: white; }
+        .event-face_locked { background-color: #f39c12; color: white; }
+        .event-face_unlocked { background-color: #95a5a6; color: white; }
+        .event-face_lost { background-color: #d35400; color: white; }
+        .event-face_found { background-color: #27ae60; color: white; }
+        .event-follow_mode_enabled { background-color: #16a085; color: white; }
+        .event-follow_mode_disabled { background-color: #7f8c8d; color: white; }
+        .event-movement { background-color: #1abc9c; color: white; }
+        .event-telemetry { background-color: #34495e; color: white; }
+        .event-error { background-color: #c0392b; color: white; }
+        .event-default { background-color: #bdc3c7; color: #2c3e50; }
+        
+        /* Loading indicator */
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+            color: #7f8c8d;
+        }
+        
+        /* No events message */
+        .no-events {
+            text-align: center;
+            padding: 30px;
+            font-style: italic;
+            color: #7f8c8d;
+        }
+        
+        /* Auto-refresh toggle */
+        .auto-refresh-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* Toggle switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #3498db;
+        }
+        input:focus + .slider {
+            box-shadow: 0 0 1px #3498db;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tello Drone Event Monitor</h1>
+        
+        <div id="statusBar" class="status">
+            <span id="statusText">Connecting to server...</span>
+            <div>
+                <span id="eventCount">0 events</span>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <div class="filter-section">
+                <select id="eventTypeFilter" class="event-type-filter">
+                    <option value="">All Event Types</option>
+                </select>
+                <div class="auto-refresh-toggle">
+                    <label class="switch">
+                        <input type="checkbox" id="autoRefreshToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <span>Auto-refresh</span>
+                </div>
+            </div>
+            <div>
+                <button id="refreshBtn" class="btn btn-primary">
+                    <span id="refreshIcon">↻</span> Refresh
+                </button>
+                <button id="clearBtn" class="btn btn-danger">Clear Events</button>
+            </div>
+        </div>
+        
+        <div id="eventList" class="event-list">
+            <div class="loading">Loading events...</div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_URL = 'http://localhost:3000';
+        const REFRESH_INTERVAL = 5000; // 5 seconds
+        
+        // State
+        let allEvents = [];
+        let eventTypes = new Set();
+        let refreshTimer = null;
+        let isAutoRefresh = true;
+        
+        // DOM elements
+        const statusBar = document.getElementById('statusBar');
+        const statusText = document.getElementById('statusText');
+        const eventCount = document.getElementById('eventCount');
+        const eventList = document.getElementById('eventList');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const refreshIcon = document.getElementById('refreshIcon');
+        const clearBtn = document.getElementById('clearBtn');
+        const eventTypeFilter = document.getElementById('eventTypeFilter');
+        const autoRefreshToggle = document.getElementById('autoRefreshToggle');
+        
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', () => {
+            checkServerStatus();
+            setupEventHandlers();
+            startAutoRefresh();
+        });
+        
+        // Setup event handlers
+        function setupEventHandlers() {
+            refreshBtn.addEventListener('click', fetchEvents);
+            clearBtn.addEventListener('click', clearEvents);
+            eventTypeFilter.addEventListener('change', filterEvents);
+            autoRefreshToggle.addEventListener('change', toggleAutoRefresh);
+            
+            // Event delegation for event card clicks
+            eventList.addEventListener('click', (e) => {
+                const eventCard = e.target.closest('.event-card');
+                if (eventCard) {
+                    toggleEventDetails(eventCard);
+                }
+            });
+        }
+        
+        // Check server status
+        async function checkServerStatus() {
+            try {
+                const response = await fetch(`${API_URL}/`);
+                if (response.ok) {
+                    const data = await response.json();
+                    updateServerStatus(true, data);
+                    fetchEvents();
+                } else {
+                    updateServerStatus(false);
+                }
+            } catch (error) {
+                updateServerStatus(false, null, error);
+            }
+        }
+        
+        // Update server status display
+        function updateServerStatus(isConnected, data = null, error = null) {
+            if (isConnected) {
+                statusBar.style.backgroundColor = '#d4edda';
+                statusBar.style.color = '#155724';
+                statusText.textContent = `Server connected - ${data.status}`;
+            } else {
+                statusBar.style.backgroundColor = '#f8d7da';
+                statusBar.style.color = '#721c24';
+                statusText.textContent = `Server disconnected - ${error ? error.message : 'unknown error'}`;
+            }
+        }
+        
+        // Fetch events from the server
+        async function fetchEvents() {
+            startRefreshAnimation();
+            
+            try {
+                const currentFilter = eventTypeFilter.value;
+                const url = currentFilter ? 
+                    `${API_URL}/events/type/${currentFilter}` : 
+                    `${API_URL}/events`;
+                
+                const response = await fetch(url);
+                if (response.ok) {
+                    const events = await response.json();
+                    allEvents = events;
+                    updateEventCount(events.length);
+                    updateEventTypes(events);
+                    renderEvents(events);
+                } else {
+                    showError('Failed to fetch events');
+                }
+            } catch (error) {
+                showError(`Error: ${error.message}`);
+            } finally {
+                stopRefreshAnimation();
+            }
+        }
+        
+        // Clear all events
+        async function clearEvents() {
+            if (!confirm('Are you sure you want to clear all events?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/events`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    allEvents = [];
+                    updateEventCount(0);
+                    renderEvents([]);
+                    eventTypes = new Set();
+                    updateEventTypeFilter();
+                } else {
+                    showError('Failed to clear events');
+                }
+            } catch (error) {
+                showError(`Error: ${error.message}`);
+            }
+        }
+        
+        // Filter events by type
+        function filterEvents() {
+            fetchEvents();
+        }
+        
+        // Toggle auto-refresh
+        function toggleAutoRefresh() {
+            isAutoRefresh = autoRefreshToggle.checked;
+            if (isAutoRefresh) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
+        }
+        
+        // Start auto-refresh timer
+        function startAutoRefresh() {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+            }
+            refreshTimer = setInterval(fetchEvents, REFRESH_INTERVAL);
+        }
+        
+        // Stop auto-refresh timer
+        function stopAutoRefresh() {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+        }
+        
+        // Toggle event details visibility
+        function toggleEventDetails(eventCard) {
+            eventCard.classList.toggle('expanded');
+        }
+        
+        // Start refresh button animation
+        function startRefreshAnimation() {
+            refreshBtn.disabled = true;
+            refreshIcon.classList.add('refresh-animation');
+        }
+        
+        // Stop refresh button animation
+        function stopRefreshAnimation() {
+            refreshBtn.disabled = false;
+            refreshIcon.classList.remove('refresh-animation');
+        }
+        
+        // Update the event count display
+        function updateEventCount(count) {
+            eventCount.textContent = `${count} event${count !== 1 ? 's' : ''}`;
+        }
+        
+        // Update event types for filter dropdown
+        function updateEventTypes(events) {
+            const currentSelection = eventTypeFilter.value;
+            
+            // Collect all event types
+            events.forEach(event => {
+                if (event.type) {
+                    eventTypes.add(event.type);
+                }
+            });
+            
+            updateEventTypeFilter(currentSelection);
+        }
+        
+        // Update the event type filter dropdown
+        function updateEventTypeFilter(currentSelection = '') {
+            // Clear existing options except the first one
+            while (eventTypeFilter.options.length > 1) {
+                eventTypeFilter.remove(1);
+            }
+            
+            // Add options for each event type
+            const sortedTypes = Array.from(eventTypes).sort();
+            sortedTypes.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = formatEventType(type);
+                eventTypeFilter.appendChild(option);
+            });
+            
+            // Restore selection if it still exists
+            if (currentSelection && sortedTypes.includes(currentSelection)) {
+                eventTypeFilter.value = currentSelection;
+            }
+        }
+        
+        // Render events to the DOM
+        function renderEvents(events) {
+            if (events.length === 0) {
+                eventList.innerHTML = '<div class="no-events">No events found</div>';
+                return;
+            }
+            
+            // Sort events by timestamp (newest first)
+            events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            eventList.innerHTML = events.map(event => {
+                const timestamp = new Date(event.timestamp).toLocaleString();
+                const eventTypeClass = `event-${event.type || 'default'}`;
+                
+                return `
+                    <div class="event-card" data-id="${event.id}">
+                        <div class="event-info">
+                            <span class="event-type-badge ${eventTypeClass}">${formatEventType(event.type)}</span>
+                            <span>${timestamp}</span>
+                        </div>
+                        <h3>${getEventTitle(event)}</h3>
+                        <div class="event-contents">
+                            <pre>${JSON.stringify(event, null, 2)}</pre>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Format event type for display
+        function formatEventType(type) {
+            if (!type) return 'Unknown';
+            return type
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, l => l.toUpperCase());
+        }
+        
+        // Get a descriptive title for an event
+        function getEventTitle(event) {
+            switch (event.type) {
+                case 'startup':
+                    return 'System Started';
+                case 'initialization':
+                    return `Drone Initialized (${event.data.simulation_mode ? 'Simulation' : 'Real'})`;
+                case 'takeoff':
+                    return `Takeoff (Battery: ${event.data.battery}%)`;
+                case 'land':
+                    return `Landing (Flight time: ${event.data.flight_time}s)`;
+                case 'emergency_stop':
+                    return 'Emergency Stop';
+                case 'face_locked':
+                    return `Face Locked: ${event.data.person_name}`;
+                case 'face_unlocked':
+                    return 'Face Lock Released';
+                case 'face_lost':
+                    return `Lost Face: ${event.data.person_name}`;
+                case 'face_found':
+                    return `Found Face: ${event.data.person_name}`;
+                case 'follow_mode_enabled':
+                    return `Follow Mode Started: ${event.data.person_name}`;
+                case 'follow_mode_disabled':
+                    return 'Follow Mode Stopped';
+                case 'tracking_toggled':
+                    return `Tracking ${event.data.enabled ? 'Enabled' : 'Disabled'}`;
+                case 'movement':
+                    return `Movement: ${formatCommand(event.data.command)}`;
+                case 'hover':
+                    return 'Hover Command';
+                case 'telemetry':
+                    return `Telemetry: Bat ${event.data.battery}%, Height ${event.data.height}cm`;
+                case 'low_battery':
+                    return `Low Battery Warning: ${event.data.level}%`;
+                case 'critical_error':
+                    return `Critical Error: ${event.data.error}`;
+                default:
+                    return formatEventType(event.type);
+            }
+        }
+        
+        // Format command name
+        function formatCommand(command) {
+            if (!command) return 'Unknown';
+            return command
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, l => l.toUpperCase());
+        }
+        
+        // Show error message
+        function showError(message) {
+            console.error(message);
+            // You could add a visual notification here
+        }
+    </script>
+</body>
+</html> 

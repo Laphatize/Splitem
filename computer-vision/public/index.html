@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MarlowOS // Secure Flight System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.11.4/dist/gsap.min.js"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+      
+      :root {
+        --bg-primary: #0a0a0a;
+        --bg-secondary: #141414;
+        --bg-tertiary: #1f1f1f;
+        --accent: #2dd4bf;
+        --accent-dark: #14b8a6;
+        --text-primary: #e5e5e5;
+        --text-secondary: #a3a3a3;
+        --border-color: #262626;
+        --danger: #f43f5e;
+        --warning: #facc15;
+      }
+
+      body {
+        font-family: 'JetBrains Mono', monospace;
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+        overflow: hidden; /* Hide body scrollbars, rely on eventList scroll */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        position: relative; /* Needed for pseudo-element positioning */
+      }
+      
+      /* Animated Background Grid */
+      body::before {
+          content: '';
+          position: fixed; /* Cover viewport */
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          /* Grid lines using repeating gradients */
+          background-image: 
+              linear-gradient(to right, var(--border-color) 1px, transparent 1px), /* Vertical lines */
+              linear-gradient(to bottom, var(--border-color) 1px, transparent 1px); /* Horizontal lines */
+          background-size: 40px 40px; /* Grid spacing */
+          opacity: 0.15; /* Subtle effect */
+          z-index: -1; /* Behind everything */
+          animation: moveGrid 10s linear infinite; /* Animation */
+          will-change: background-position; /* Performance hint */
+      }
+
+      @keyframes moveGrid {
+          0% { background-position: 0 0; }
+          100% { background-position: 80px 40px; } /* Move diagonally */
+      }
+      
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: #000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 1s ease-out;
+      }
+      
+      #loading-container {
+        position: relative;
+        width: 300px;
+        height: 300px;
+      }
+      
+      #loading-progress {
+        margin-top: 20px;
+        font-size: 14px;
+        color: var(--accent);
+        letter-spacing: 2px;
+        text-align: center;
+        width: 100%;
+        text-shadow: 0 0 5px var(--accent);
+      }
+      
+      .glow {
+        filter: drop-shadow(0 0 10px var(--accent));
+      }
+      
+      .typing-animation::after {
+        content: "|";
+        animation: blink 0.7s infinite;
+        margin-left: 2px;
+      }
+      
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+      }
+      
+      .hexagon {
+        clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+        transition: transform 0.3s ease;
+      }
+      .hexagon:hover {
+          transform: rotate(15deg) scale(1.1);
+      }
+      
+      .badge-glow {
+        animation: pulse 1.5s infinite ease-in-out;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 5px 1px var(--accent); }
+        50% { box-shadow: 0 0 12px 3px var(--accent); }
+      }
+      
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: var(--bg-secondary); 
+        border-radius: 8px;
+      }
+       
+      ::-webkit-scrollbar-thumb {
+        background: var(--accent); 
+        border-radius: 8px;
+        border: 2px solid var(--bg-secondary);
+      }
+      
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--accent-dark); 
+      }
+      
+      /* Event items animation */
+      .event-item {
+        transform: translateX(-30px) scale(0.98);
+        opacity: 0;
+        transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.3s ease-out;
+        border-left: 3px solid transparent;
+      }
+      
+      .event-item.show {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+      }
+
+      /* Add category border colors */
+      .event-item.system { border-left-color: #3b82f6; }
+      .event-item.flight { border-left-color: var(--accent); }
+      .event-item.face { border-left-color: var(--warning); }
+      .event-item.control { border-left-color: #a855f7; }
+      .event-item.error { border-left-color: var(--danger); }
+      .event-item.default { border-left-color: #737373; }
+      
+    
+      
+      @keyframes scan {
+        0% { top: 0%; }
+        50% { top: calc(100% - 3px); }
+        100% { top: 0%; }
+      }
+
+      /* Card hover effect */
+      .dashboard-card {
+          transition: transform 0.3s ease, box-shadow 0.3s ease;
+          position: relative;
+          overflow: hidden;
+          background-color: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 0.75rem;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+      }
+      .dashboard-card:hover {
+          transform: translateY(-4px) scale(1.02);
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+          border-color: var(--accent);
+      }
+       /* Add a subtle shine effect on hover */
+      .dashboard-card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 50%;
+          height: 100%;
+          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+          transform: skewX(-25deg);
+          transition: left 0.5s ease;
+      }
+      .dashboard-card:hover::before {
+          left: 120%;
+      }
+
+
+      /* Button styles */
+      .btn {
+        padding: 0.5rem 1.25rem;
+        border-radius: 0.5rem;
+        font-weight: 500;
+        transition: all 0.2s ease-in-out;
+        border: 1px solid transparent;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      }
+      .btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      }
+      .btn-primary {
+        background-color: var(--accent);
+        color: var(--bg-primary);
+        border-color: var(--accent);
+      }
+      .btn-primary:hover {
+        background-color: var(--accent-dark);
+        border-color: var(--accent-dark);
+      }
+      .btn-danger {
+        background-color: var(--danger);
+        color: var(--text-primary);
+        border-color: var(--danger);
+      }
+      .btn-danger:hover {
+        background-color: #e11d48;
+        border-color: #e11d48;
+      }
+
+      /* Input/Select Styles */
+      .input-field {
+        background-color: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        color: var(--text-primary);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+      .input-field:focus {
+          outline: none;
+          border-color: var(--accent);
+          box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.3);
+      }
+      
+      /* Add perspective to the main content area */
+      #main-content {
+          perspective: 1000px;
+      }
+
+       /* Command Center Tilt Styles */
+      #command-center {
+          transform-style: preserve-3d;
+          transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1); /* Smoother transition */
+          will-change: transform; /* Performance hint */
+      }
+      
+      /* Screenshot modal styles */
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 9999;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background-color: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+      }
+      
+      .modal-content {
+        position: relative;
+        margin: 2% auto;
+        padding: 20px;
+        width: 80%;
+        max-width: 900px;
+        background-color: var(--bg-secondary);
+        border: 1px solid var(--accent);
+        border-radius: 10px;
+        box-shadow: 0 0 25px rgba(45, 212, 191, 0.3);
+        animation: modalFadeIn 0.3s ease;
+      }
+      
+      @keyframes modalFadeIn {
+        from {opacity: 0; transform: translateY(-30px);}
+        to {opacity: 1; transform: translateY(0);}
+      }
+      
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+      }
+      
+      .modal-title {
+        font-weight: 600;
+        font-size: 1.2rem;
+        color: var(--accent);
+      }
+      
+      .close-modal {
+        cursor: pointer;
+        font-size: 24px;
+        color: var(--text-secondary);
+        transition: color 0.2s;
+      }
+      
+      .close-modal:hover {
+        color: var(--accent);
+      }
+      
+      .modal-body {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      
+      .screenshot-container {
+        width: 100%;
+        max-height: 70vh;
+        overflow: hidden;
+        border-radius: 5px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: var(--bg-primary);
+      }
+      
+      .screenshot-container img {
+        max-width: 100%;
+        max-height: 70vh;
+        object-fit: contain;
+      }
+      
+      .event-details {
+        border-top: 1px solid var(--border-color);
+        padding-top: 15px;
+        font-size: 0.9rem;
+      }
+      
+      .event-details-item {
+        display: flex;
+        margin-bottom: 8px;
+      }
+      
+      .event-details-label {
+        min-width: 120px;
+        color: var(--text-secondary);
+      }
+      
+      .event-item {
+        cursor: pointer;
+      }
+      
+      .event-item:hover {
+        background-color: var(--bg-tertiary) !important;
+      }
+      
+      .no-screenshot {
+        padding: 40px;
+        text-align: center;
+        color: var(--text-secondary);
+        font-style: italic;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+      <div id="loading-container"></div>
+      <div id="loading-progress" class="typing-animation">INITIALIZING MARLOW OS</div>
+    </div>
+
+    <!-- Screenshot Modal -->
+    <div id="screenshotModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-title">Event Screenshot</div>
+          <span class="close-modal">&times;</span>
+        </div>
+        <div class="modal-body">
+          <div class="screenshot-container">
+            <div id="screenshotPlaceholder" class="no-screenshot">
+              No screenshot available for this event
+            </div>
+            <img id="screenshotImage" style="display: none;" />
+          </div>
+          <div class="event-details">
+            <div class="event-details-item">
+              <div class="event-details-label">Event Type:</div>
+              <div id="eventType"></div>
+            </div>
+            <div class="event-details-item">
+              <div class="event-details-label">Timestamp:</div>
+              <div id="eventTime"></div>
+            </div>
+            <div class="event-details-item">
+              <div class="event-details-label">Details:</div>
+              <div id="eventDetails"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto p-6 opacity-0 h-screen flex flex-col" id="main-content">
+      <!-- Header -->
+      <header class="flex justify-between items-center mb-8 flex-shrink-0"> 
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 hexagon bg-teal-400 text-black flex items-center justify-center font-bold text-xl glow">M</div>
+          <div>
+            <h1 class="text-3xl font-semibold tracking-wide text-teal-400">
+                MARLOW<span class="text-white opacity-90">OS</span>
+            </h1>
+            <p class="text-xs text-neutral-400 uppercase tracking-widest">
+                Secure Flight System v1.0.4
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center bg-neutral-900 rounded-full px-4 py-2 border border-neutral-700 shadow-md">
+          <div id="statusDot" class="w-3 h-3 rounded-full bg-teal-400 mr-3 badge-glow"></div>
+          <span id="statusIndicatorText" class="text-sm font-medium text-teal-400 tracking-wider">SYSTEM ACTIVE</span>
+        </div>
+      </header>
+
+      <!-- Command Center -->
+      <section id="command-center" class="bg-neutral-900 rounded-xl pt-6 pb-20 px-6 shadow-xl border border-neutral-800 mb-8 relative overflow-hidden flex-shrink-0">
+        <div id="scanner-line"></div>
+        <header class="flex justify-between items-center mb-6 pb-4 border-b border-neutral-800">
+          <h2 class="text-xl font-semibold text-teal-400 tracking-wider">COMMAND CENTER</h2>
+          <span id="eventCount" class="text-sm bg-neutral-800 py-1 px-3 rounded-full text-teal-400 font-medium">0 events</span>
+        </header>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div class="dashboard-card p-5">
+            <div class="absolute top-2 right-2 w-10 h-10 text-neutral-600 opacity-30">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M21.41 11.41l-8.83-8.83c-.78-.78-2.05-.78-2.83 0l-8.83 8.83c-.78.78-.78 2.05 0 2.83l8.83 8.83c.78.78 2.05.78 2.83 0l8.83-8.83c.79-.78.79-2.05.01-2.83zM13 18h-2v-6h2v6zm0-8h-2V8h2v2z"></path></svg>
+            </div>
+            <h3 class="uppercase text-xs text-neutral-400 mb-2 font-medium tracking-wider">Flight Status</h3>
+            <div id="flightStatus" class="text-2xl font-semibold">Grounded</div>
+          </div>
+          <div class="dashboard-card p-5">
+             <div class="absolute top-2 right-2 w-10 h-10 text-neutral-600 opacity-30">
+               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M15.67 4H8.33C7.6 4 7 4.6 7 5.33V18.67C7 19.4 7.6 20 8.33 20h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4zM15 18H9V6h6v12z"></path></svg>
+            </div>
+            <h3 class="uppercase text-xs text-neutral-400 mb-2 font-medium tracking-wider">Battery Level</h3>
+            <div id="batteryLevel" class="text-2xl font-semibold">--</div>
+          </div>
+          <div class="dashboard-card p-5">
+             <div class="absolute top-2 right-2 w-10 h-10 text-neutral-600 opacity-30">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></svg>
+            </div>
+            <h3 class="uppercase text-xs text-neutral-400 mb-2 font-medium tracking-wider">Faces Detected</h3>
+            <div id="facesDetected" class="text-2xl font-semibold">0</div>
+          </div>
+          <div class="dashboard-card p-5">
+             <div class="absolute top-2 right-2 w-10 h-10 text-neutral-600 opacity-30">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"></path></svg>
+            </div>
+            <h3 class="uppercase text-xs text-neutral-400 mb-2 font-medium tracking-wider">Security Alerts</h3>
+            <div id="securityAlerts" class="text-2xl font-semibold">0</div>
+          </div>
+        </div>
+        <div id="statusBar" class="hidden text-sm text-teal-400 bg-neutral-800 p-3 rounded-md mt-4">Connecting to server...</div>
+      </section>
+
+      <!-- Event Monitoring -->
+      <section class="mb-8 flex flex-col flex-grow min-h-0">
+        <header class="mb-4 flex justify-between items-center flex-shrink-0">
+          <h2 class="uppercase text-base tracking-wider text-teal-400 font-semibold">Event Monitoring</h2>
+          <div class="text-xs text-neutral-500" id="timestamp">SYSTEM TIME: --:--:--</div>
+        </header>
+
+        <div class="flex flex-col sm:flex-row justify-between items-center bg-neutral-900 p-4 rounded-xl shadow-lg border border-neutral-800 mb-6 flex-shrink-0">
+          <div class="flex items-center gap-4 mb-4 sm:mb-0">
+            <select id="eventTypeFilter" class="input-field text-sm">
+              <option value="">All Event Types</option>
+              <option value="system">System Events</option>
+              <option value="flight">Flight Events</option>
+              <option value="face">Face Detection Events</option>
+              <option value="control">Control Events</option>
+              <option value="error">Error Events</option>
+            </select>
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" id="autoRefreshToggle" checked class="form-checkbox input-field h-4 w-4 text-teal-500 rounded focus:ring-teal-500" />
+              <span>Auto-refresh</span>
+            </label>
+          </div>
+          <div class="flex gap-3">
+            <button id="refreshBtn" class="btn btn-primary">
+              <span id="refreshIcon" class="inline-block mr-1">↻</span> Refresh
+            </button>
+            <button id="clearBtn" class="btn btn-danger">
+              Clear Events
+            </button>
+          </div>
+        </div>
+
+        <div id="eventList" class="bg-neutral-900 rounded-xl shadow-xl border border-neutral-800 overflow-y-auto flex-grow">
+          <div class="text-center py-12 text-neutral-500 italic">Initializing Event Feed...</div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      // --- ThreeJS Loading Animation (Enhanced) ---
+      const loadingContainer = document.getElementById("loading-container");
+      const loadingScreen = document.getElementById("loading-screen");
+      const loadingProgress = document.getElementById("loading-progress");
+      const mainContent = document.getElementById("main-content");
+      
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, 300 / 300, 0.1, 1000);
+      camera.position.set(0, 1.5, 6); // Slightly higher and further back view
+      camera.lookAt(scene.position); // Ensure it looks at the center initially
+      
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(300, 300);
+      renderer.setPixelRatio(window.devicePixelRatio); // Better resolution on high DPI screens
+      renderer.setClearColor(0x000000, 0);
+      loadingContainer.appendChild(renderer.domElement);
+      
+      // Drone Group
+      const droneGroup = new THREE.Group();
+      scene.add(droneGroup); // Add group to scene first
+
+      // Body
+      const bodyGeometry = new THREE.CylinderGeometry(1.5, 1.5, 0.4, 6);
+      const bodyMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1f1f1f, metalness: 0.8, roughness: 0.4
+      });
+      const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+      body.rotation.y = Math.PI / 6;
+      droneGroup.add(body);
+      
+      // Pulsing Center Core
+      const centerGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+      const centerMaterial = new THREE.MeshStandardMaterial({ 
+          color: 0x2dd4bf, metalness: 0.5, roughness: 0.2,
+          emissive: 0x2dd4bf, emissiveIntensity: 0.5 
+      });
+      const center = new THREE.Mesh(centerGeometry, centerMaterial);
+      center.position.y = 0.1;
+      droneGroup.add(center);
+      
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Slightly less ambient
+      scene.add(ambientLight);
+      const pointLight = new THREE.PointLight(0x99f6e4, 1.2, 20); // Teal point light, stronger, defined distance
+      pointLight.position.set(0, 3, 4);
+      scene.add(pointLight);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6); // Slightly stronger directional
+      directionalLight.position.set(-5, 4, 3);
+      scene.add(directionalLight);
+
+      // Arms & Spinning Propellers
+      const propellers = []; // Array to hold propellers for animation
+      const armMaterial = new THREE.MeshStandardMaterial({ 
+          color: 0x5eead4, metalness: 0.6, roughness: 0.3 
+      });
+      const propMaterial = new THREE.MeshStandardMaterial({ 
+          color: 0x99f6e4, metalness: 0.4, roughness: 0.5,
+          transparent: true, opacity: 0.7, // Slightly less opaque
+          side: THREE.DoubleSide // Render both sides for thin props
+      });
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        // Arm
+        const armGeometry = new THREE.BoxGeometry(1.8, 0.08, 0.15);
+        const arm = new THREE.Mesh(armGeometry, armMaterial);
+        arm.position.x = Math.cos(angle) * 1.1;
+        arm.position.z = Math.sin(angle) * 1.1;
+        arm.position.y = -0.1;
+        arm.rotation.y = -angle;
+        droneGroup.add(arm);
+        
+        // Propeller Group (for easier rotation)
+        const propellerGroup = new THREE.Group();
+        propellerGroup.position.x = Math.cos(angle) * 1.6;
+        propellerGroup.position.z = Math.sin(angle) * 1.6;
+        propellerGroup.position.y = -0.05;
+        droneGroup.add(propellerGroup);
+
+        // Propeller Blades (simple representation)
+        const bladeGeometry = new THREE.BoxGeometry(0.6, 0.02, 0.1); // Blade shape
+        const blade1 = new THREE.Mesh(bladeGeometry, propMaterial);
+        blade1.rotation.y = Math.PI / 4; // Angled blades
+        const blade2 = new THREE.Mesh(bladeGeometry, propMaterial);
+        blade2.rotation.y = -Math.PI / 4;
+        propellerGroup.add(blade1);
+        propellerGroup.add(blade2);
+
+        propellers.push(propellerGroup); // Add group to array for animation
+      }
+      
+      // Pulsing Grid Helper
+      const gridColor = new THREE.Color(0x2dd4bf);
+      const gridHelper = new THREE.GridHelper(10, 20, gridColor, gridColor); // Larger grid
+      gridHelper.material.opacity = 0.1; // Start more subtle
+      gridHelper.material.transparent = true;
+      gridHelper.position.y = -1.8; // Lower grid
+      scene.add(gridHelper);
+
+      // Enhanced Particle System (Swirling)
+      const particleCount = 400; // More particles
+      const particlesGeometry = new THREE.BufferGeometry();
+      const posArray = new Float32Array(particleCount * 3);
+      const particleVelocities = new Float32Array(particleCount * 3); // Store velocities
+
+      for (let i = 0; i < particleCount; i++) {
+          const i3 = i * 3;
+          // Initial position - spread out more
+          posArray[i3 + 0] = (Math.random() - 0.5) * 15; 
+          posArray[i3 + 1] = (Math.random() - 0.5) * 10; 
+          posArray[i3 + 2] = (Math.random() - 0.5) * 15;
+          // Initial velocities (random direction)
+          particleVelocities[i3 + 0] = (Math.random() - 0.5) * 0.02;
+          particleVelocities[i3 + 1] = (Math.random() - 0.5) * 0.02;
+          particleVelocities[i3 + 2] = (Math.random() - 0.5) * 0.02;
+      }
+      particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+      const particlesMaterial = new THREE.PointsMaterial({
+        size: 0.04, // Slightly larger
+        color: 0x2dd4bf,
+        transparent: true,
+        opacity: 0.7,
+        blending: THREE.AdditiveBlending,
+        sizeAttenuation: true, // Smaller when further away
+        depthWrite: false // Prevent particles blocking each other weirdly
+      });
+      const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+      scene.add(particlesMesh);
+      
+      // Animation Loop (Enhanced)
+      const clock = new THREE.Clock();
+      let cameraAngle = 0; // For camera orbit
+      function animate() {
+        const elapsedTime = clock.getElapsedTime();
+        const deltaTime = clock.getDelta(); // Time since last frame
+        requestAnimationFrame(animate);
+        
+        // Drone rotation and bobbing
+        droneGroup.rotation.y += 0.01; 
+        droneGroup.position.y = Math.sin(elapsedTime * 2.0) * 0.15; // Faster bobbing
+
+        // Spin propellers
+        const propellerSpeed = 25; // Adjust speed
+        propellers.forEach(prop => {
+            prop.rotation.y += propellerSpeed * deltaTime;
+        });
+
+        // Pulse center core light
+        centerMaterial.emissiveIntensity = 0.5 + Math.sin(elapsedTime * 5.0) * 0.4; // Faster pulse
+
+        // Pulse grid opacity
+        gridHelper.material.opacity = 0.1 + Math.sin(elapsedTime * 1.5) * 0.08;
+
+        // Animate particles (Simple swirl towards center)
+        const positions = particlesGeometry.attributes.position.array;
+        for (let i = 0; i < particleCount; i++) {
+            const i3 = i * 3;
+            // Move particle based on velocity
+            positions[i3 + 0] += particleVelocities[i3 + 0];
+            positions[i3 + 1] += particleVelocities[i3 + 1];
+            positions[i3 + 2] += particleVelocities[i3 + 2];
+
+            // Simple gravity/attraction towards center (0,0,0)
+            const dx = -positions[i3 + 0];
+            const dy = -positions[i3 + 1];
+            const dz = -positions[i3 + 2];
+            particleVelocities[i3 + 0] += dx * 0.0005; // Attraction strength
+            particleVelocities[i3 + 1] += dy * 0.0005;
+            particleVelocities[i3 + 2] += dz * 0.0005;
+
+            // Reset particles that go too far
+            const distSq = positions[i3 + 0]**2 + positions[i3 + 1]**2 + positions[i3 + 2]**2;
+             if (distSq > 100) { // Reset radius squared
+                 positions[i3 + 0] = (Math.random() - 0.5) * 15; 
+                 positions[i3 + 1] = (Math.random() - 0.5) * 10; 
+                 positions[i3 + 2] = (Math.random() - 0.5) * 15;
+                 particleVelocities[i3 + 0] = (Math.random() - 0.5) * 0.02;
+                 particleVelocities[i3 + 1] = (Math.random() - 0.5) * 0.02;
+                 particleVelocities[i3 + 2] = (Math.random() - 0.5) * 0.02;
+             }
+        }
+        particlesGeometry.attributes.position.needsUpdate = true; // IMPORTANT!
+
+        // Subtle camera orbit
+        cameraAngle += 0.002; // Orbit speed
+        camera.position.x = Math.sin(cameraAngle) * 6;
+        camera.position.z = Math.cos(cameraAngle) * 6;
+        camera.lookAt(scene.position); // Keep looking at the center
+
+        // Render
+        renderer.render(scene, camera);
+      }
+      animate();
+      
+      // --- Simulate loading sequence text (Keep as is) ---
+      let loadingTexts = [
+        "INITIALIZING MARLOW OS",
+        "CHECKING SYSTEM INTEGRITY",
+        "CALIBRATING SENSORS",
+        "LOADING FLIGHT MODULES",
+        "ESTABLISHING SECURE CONNECTION",
+        "INITIALIZING FACE RECOGNITION",
+        "ACTIVATING SECURITY PROTOCOLS",
+        "SYSTEM READY"
+      ];
+      
+      let currentTextIndex = 0;
+      let textInterval = setInterval(() => {
+        if (currentTextIndex >= loadingTexts.length - 1) {
+          clearInterval(textInterval);
+          loadingProgress.textContent = loadingTexts[currentTextIndex];
+          loadingProgress.classList.remove("typing-animation");
+          
+          // Show the main content
+          setTimeout(() => {
+            gsap.to(loadingScreen, {
+              opacity: 0,
+              duration: 1,
+              onComplete: () => {
+                loadingScreen.style.display = "none";
+                gsap.to(mainContent, {
+                  opacity: 1,
+                  duration: 1,
+                  ease: "power2.out"
+                });
+                // Animate in each dashboard element
+                gsap.from(".grid > div", {
+                  y: 30,
+                  opacity: 0,
+                  duration: 0.6,
+                  stagger: 0.15,
+                  ease: "back.out(1.7)"
+                });
+              }
+            });
+          }, 1000);
+        } else {
+          loadingProgress.textContent = loadingTexts[currentTextIndex];
+          currentTextIndex++;
+        }
+      }, 800);
+
+      // --- UI Functionality (Keep as is) ---
+      const refreshBtn = document.getElementById("refreshBtn");
+      const refreshIcon = document.getElementById("refreshIcon");
+      const clearBtn = document.getElementById("clearBtn");
+      const eventList = document.getElementById("eventList");
+      const eventCount = document.getElementById("eventCount");
+      const eventTypeFilter = document.getElementById("eventTypeFilter");
+      const flightStatus = document.getElementById("flightStatus");
+      const batteryLevel = document.getElementById("batteryLevel");
+      const facesDetected = document.getElementById("facesDetected");
+      const securityAlerts = document.getElementById("securityAlerts");
+      const statusDot = document.getElementById("statusDot");
+      const statusIndicatorText = document.getElementById("statusIndicatorText");
+      const timestamp = document.getElementById("timestamp");
+
+      let events = [];
+      let faceCount = 0;
+      let alertCount = 0;
+      let isFlying = false;
+      let batteryValue = "--";
+      let isConnected = false;
+      
+      // Update timestamp
+      function updateTimestamp() {
+        const now = new Date();
+        timestamp.textContent = `SYSTEM TIME: ${now.toLocaleTimeString()}`;
+      }
+      setInterval(updateTimestamp, 1000);
+      updateTimestamp();
+      
+      // Event categories for filtering
+      const eventCategories = {
+        system: ["initialization", "startup", "shutdown", "video_stream_started", "detection_method_changed", "audio_feedback_toggled"],
+        flight: ["takeoff", "land", "emergency_stop", "hover", "drone_connected", "simulator_started", "low_battery"],
+        face: ["face_detected", "face_locked", "face_unlocked", "face_lost", "face_found", "follow_mode_enabled", "follow_mode_disabled", "person_renamed"],
+        control: ["movement", "manual_control", "tracking_toggled", "search_mode_changed", "hover"],
+        error: ["connection_error", "movement_error", "hover_error", "detection_method_error", "critical_error", "loop_error", "slow_frame_capture"]
+      };
+
+      // Excluded event types (mainly telemetry)
+      const excludedEvents = ["telemetry"];
+
+      // Icons for different event types
+      const eventIcons = {
+        // System events
+        "initialization": "🚀",
+        "startup": "🚀",
+        "shutdown": "🛑",
+        "video_stream_started": "📹",
+        "detection_method_changed": "🔍",
+        "audio_feedback_toggled": "🔊",
+        
+        // Flight events
+        "takeoff": "⬆️",
+        "land": "⬇️",
+        "emergency_stop": "⚠️",
+        "hover": "⏸️",
+        "drone_connected": "🔌",
+        "simulator_started": "🎮",
+        "low_battery": "🔋",
+        
+        // Face events
+        "face_detected": "👁️",
+        "face_locked": "🔒",
+        "face_unlocked": "🔓",
+        "face_lost": "❓",
+        "face_found": "✅",
+        "follow_mode_enabled": "🚶",
+        "follow_mode_disabled": "🚷",
+        "person_renamed": "📝",
+        
+        // Control events
+        "movement": "➡️",
+        "manual_control": "🎮",
+        "tracking_toggled": "👀",
+        "search_mode_changed": "🔍",
+        
+        // Error events
+        "connection_error": "❌",
+        "movement_error": "⚠️",
+        "hover_error": "⚠️",
+        "detection_method_error": "⚠️",
+        "critical_error": "🆘",
+        "loop_error": "⚠️",
+        "slow_frame_capture": "⌛"
+      };
+
+      // Colors for different event categories
+      const categoryColors = {
+        system: "bg-blue-500",
+        flight: "bg-teal-500",
+        face: "bg-yellow-500", 
+        control: "bg-purple-500",
+        error: "bg-red-500",
+        default: "bg-gray-500"
+      };
+
+      // Function to get the category of an event
+      function getEventCategory(eventType) {
+        for (const [category, eventTypes] of Object.entries(eventCategories)) {
+          if (eventTypes.includes(eventType)) {
+            return category;
+          }
+        }
+        return "default";
+      }
+
+      // Function to format event details based on event type
+      function formatEventDetails(event) {
+        const { type, data } = event;
+        let details = "";
+
+        switch (type) {
+          // System events
+          case "initialization":
+          case "startup":
+            details = "System initialized";
+            break;
+          case "shutdown":
+            details = `Shutdown reason: ${data.reason}`;
+            break;
+          case "video_stream_started":
+            details = "Video stream started";
+            break;
+          case "detection_method_changed":
+            details = `Detection method: ${data.method}`;
+            break;
+          case "audio_feedback_toggled":
+            details = `Audio feedback: ${data.enabled ? "Enabled" : "Disabled"}`;
+            break;
+            
+          // Flight events
+          case "takeoff":
+            details = `Takeoff successful. Height: ${data.height}cm`;
+            break;
+          case "land":
+            details = `Landing completed. Flight time: ${data.flight_time}s`;
+            break;
+          case "emergency_stop":
+            details = `Emergency stop triggered: ${data.reason}`;
+            break;
+          case "hover":
+            details = "Drone hovering";
+            break;
+          case "drone_connected":
+            details = `Connected to drone. Battery: ${data.battery}%`;
+            break;
+          case "simulator_started":
+            details = "Running in simulation mode";
+            break;
+          case "low_battery":
+            details = `Low battery warning: ${data.level}%`;
+            break;
+            
+          // Face events
+          case "face_detected":
+            details = "Face detected in frame";
+            break;
+          case "face_locked":
+            details = `Locked on: ${data.person_name}`;
+            break;
+          case "face_unlocked":
+            details = "Face lock released";
+            break;
+          case "face_lost":
+            details = `Lost tracking of ${data.person_name}`;
+            break;
+          case "face_found":
+            details = `Reacquired ${data.person_name}`;
+            break;
+          case "follow_mode_enabled":
+            details = `Following ${data.person_name}`;
+            break;
+          case "follow_mode_disabled":
+            details = "Follow mode disabled";
+            break;
+          case "person_renamed":
+            details = `Renamed from "${data.old_name}" to "${data.new_name}"`;
+            break;
+            
+          // Control events
+          case "movement":
+            details = `Movement: ${data.command}`;
+            break;
+          case "manual_control":
+            details = `Manual control: ${data.direction} ${data.amount}cm`;
+            break;
+          case "tracking_toggled":
+            details = `Tracking ${data.enabled ? "enabled" : "disabled"}`;
+            break;
+          case "search_mode_changed":
+            details = `Search mode ${data.enabled ? "activated" : "deactivated"}`;
+            break;
+            
+          // Error events
+          case "connection_error":
+            details = `Connection error: ${data.error}`;
+            break;
+          case "movement_error":
+            details = `Movement error: ${data.error}`;
+            break;
+          case "hover_error":
+            details = `Hover command error: ${data.error}`;
+            break;
+          case "detection_method_error":
+            details = `Detection error: ${data.error}`;
+            break;
+          case "critical_error":
+            details = `CRITICAL ERROR: ${data.error}`;
+            break;
+          case "loop_error":
+            details = `Processing error: ${data.error}`;
+            break;
+          case "slow_frame_capture":
+            details = `Slow frame capture: ${data.time_since_last_frame.toFixed(1)}s`;
+            break;
+            
+          default:
+            if (data && Object.keys(data).length > 0) {
+              details = JSON.stringify(data);
+            } else {
+              details = "No additional details";
+            }
+        }
+
+        return details;
+      }
+
+      // Function to get an event icon
+      function getEventIcon(eventType) {
+        return eventIcons[eventType] || "📋";
+      }
+
+      function simulateEvents() {
+        const types = ["initialization", "face_locked", "face_lost", "takeoff", "land", "emergency_stop"];
+        return Array.from({ length: Math.floor(Math.random() * 6) + 1 }, (_, i) => ({
+          id: i,
+          type: types[Math.floor(Math.random() * types.length)],
+          data: { person_name: "Person", flight_time: 45, battery: 80, height: 120, reason: "user_keypress" },
+          timestamp: new Date().toISOString(),
+        }));
+      }
+
+      function filterEvents() {
+        const filterType = eventTypeFilter.value;
+        
+        if (!filterType) {
+          return events.filter(e => !excludedEvents.includes(e.type));
+        }
+        
+        return events.filter(e => {
+          const category = getEventCategory(e.type);
+          return category === filterType && !excludedEvents.includes(e.type);
+        });
+      }
+
+      function renderEvents(list) {
+        const filteredList = list.filter(e => !excludedEvents.includes(e.type));
+        
+        if (filteredList.length === 0) {
+          eventList.innerHTML = '<div class="text-center py-12 text-neutral-500 italic">No events found</div>';
+        } else {
+          eventList.innerHTML = filteredList.map((e, index) => {
+            const category = getEventCategory(e.type);
+            const icon = getEventIcon(e.type);
+            const details = formatEventDetails(e);
+            const categoryColorClass = categoryColors[category] || categoryColors.default;
+            const hasScreenshot = e.screenshot ? 'has-screenshot' : '';
+            
+            return `
+            <div class="event-item ${hasScreenshot} border-b border-neutral-800 p-4 hover:bg-neutral-800 transition-all duration-200 ${category}" style="animation-delay: ${index * 50}ms" data-event-index="${index}">
+              <div class="flex items-center mb-2">
+                <div class="flex items-center justify-center w-10 h-10 rounded-lg ${categoryColorClass} mr-3 text-xl shadow-lg glow">
+                  ${icon}
+                </div>
+                <div class="flex-1">
+                  <div class="flex justify-between text-sm">
+                    <span class="font-semibold text-white uppercase tracking-wider">${e.type.replace(/_/g, ' ')}</span>
+                    <span class="text-neutral-400">${new Date(e.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                </div>
+                ${e.screenshot ? '<div class="text-xs text-teal-400 ml-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" /></svg></div>' : ''}
+              </div>
+              <div class="ml-13 text-white text-sm pl-13 ml-3 border-l-2 border-neutral-700 pl-4">${details}</div>
+            </div>`;
+          }).join('');
+          
+          // Animate in the events
+          setTimeout(() => {
+            document.querySelectorAll('.event-item').forEach(item => {
+              item.classList.add('show');
+              
+              // Add click handler to show screenshot
+              item.addEventListener('click', () => {
+                const index = parseInt(item.getAttribute('data-event-index'));
+                showEventDetails(filteredList[index]);
+              });
+            });
+          }, 100);
+        }
+        
+        eventCount.textContent = `${filteredList.length} event${filteredList.length !== 1 ? 's' : ''}`;
+      }
+
+      function updateDashboard() {
+        // Update flight status
+        if (isFlying) {
+          flightStatus.textContent = "Flying";
+          flightStatus.classList.add("text-teal-400");
+          flightStatus.classList.remove("text-white");
+        } else {
+          flightStatus.textContent = "Grounded";
+          flightStatus.classList.remove("text-teal-400");
+          flightStatus.classList.add("text-white");
+        }
+
+        // Update battery level
+        batteryLevel.textContent = batteryValue;
+        if (batteryValue !== "--") {
+          const batteryNum = parseInt(batteryValue);
+          if (batteryNum < 20) {
+            batteryLevel.classList.add("text-red-500");
+            batteryLevel.classList.remove("text-yellow-500", "text-green-500");
+          } else if (batteryNum < 50) {
+            batteryLevel.classList.add("text-yellow-500");
+            batteryLevel.classList.remove("text-red-500", "text-green-500");
+          } else {
+            batteryLevel.classList.add("text-green-500");
+            batteryLevel.classList.remove("text-red-500", "text-yellow-500");
+          }
+        } else {
+          batteryLevel.classList.remove("text-red-500", "text-yellow-500", "text-green-500");
+        }
+
+        // Update faces detected
+        facesDetected.textContent = faceCount;
+        if (faceCount > 0) {
+          facesDetected.classList.add("text-yellow-400");
+          facesDetected.classList.remove("text-white");
+        } else {
+          facesDetected.classList.remove("text-yellow-400");
+          facesDetected.classList.add("text-white");
+        }
+
+        // Update security alerts
+        securityAlerts.textContent = alertCount;
+        if (alertCount > 0) {
+          securityAlerts.classList.add("text-red-500", "animate-pulse");
+          securityAlerts.classList.remove("text-white");
+        } else {
+          securityAlerts.classList.remove("text-red-500", "animate-pulse");
+          securityAlerts.classList.add("text-white");
+        }
+
+        // Update status indicator
+        statusIndicatorText.textContent = isConnected ? "SYSTEM ONLINE" : "OFFLINE";
+        statusDot.className = `w-3 h-3 rounded-full mr-3 ${isConnected ? 'bg-teal-400 badge-glow' : 'bg-red-500'}`;
+      }
+
+      function handleNewEvent(event) {
+        events.unshift(event);
+        if (events.length > 200) events.pop();
+
+        const audio = {
+          takeoff: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-fast-small-sweep-transition-166.mp3'),
+          land: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-interface-option-select-2573.mp3'),
+          face_locked: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-positive-interface-beep-221.mp3'),
+          face_lost: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3'),
+          emergency_stop: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-digital-clock-beep-989.mp3'),
+          error: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alert-quick-chime-766.mp3')
+        };
+        
+        if (event.type === 'takeoff') audio.takeoff.play();
+        else if (event.type === 'land') audio.land.play();
+        else if (event.type === 'face_locked') audio.face_locked.play();
+        else if (event.type === 'face_lost') audio.face_lost.play();
+        else if (event.type === 'emergency_stop') audio.emergency_stop.play();
+        else if (event.type.includes('error')) audio.error.play();
+        
+        switch (event.type) {
+          case "face_detected":
+          case "face_locked":
+            faceCount++;
+            break;
+          case "face_unlocked":
+          case "face_lost":
+            if (faceCount > 0) faceCount--;
+            break;
+          case "takeoff":
+            isFlying = true;
+            break;
+          case "land":
+          case "emergency_stop":
+            isFlying = false;
+            break;
+          case "drone_connected":
+          case "simulator_started":
+            isConnected = true;
+            if (event.data && event.data.battery) {
+              batteryValue = event.data.battery + "%";
+            }
+            break;
+          case "connection_error":
+          case "critical_error":
+            alertCount++;
+            break;
+          case "low_battery":
+            if (event.data && event.data.level) {
+              batteryValue = event.data.level + "%";
+            }
+            alertCount++;
+            break;
+          case "shutdown":
+            isConnected = false;
+            break;
+        }
+        
+        updateDashboard();
+        renderEvents(filterEvents());
+      }
+
+      function simulateWebhookReceive() {
+        if (document.getElementById("autoRefreshToggle").checked) {
+          const newEvent = simulateEvents()[0];
+          handleNewEvent(newEvent);
+        }
+      }
+
+      refreshBtn.addEventListener("click", () => {
+        refreshIcon.classList.add("animate-spin");
+        
+        new Audio('https://assets.mixkit.co/sfx/preview/mixkit-tech-click-1140.mp3').play();
+        
+        setTimeout(() => {
+          events = simulateEvents();
+          
+          faceCount = 0;
+          alertCount = 0;
+          isFlying = false;
+          batteryValue = "--";
+          
+          events.forEach(event => {
+            switch (event.type) {
+              case "face_detected":
+              case "face_locked":
+                faceCount++;
+                break;
+              case "takeoff":
+                isFlying = true;
+                break;
+              case "drone_connected":
+              case "simulator_started":
+                isConnected = true;
+                if (event.data && event.data.battery) {
+                  batteryValue = event.data.battery + "%";
+                }
+                break;
+              case "critical_error":
+                alertCount++;
+                break;
+            }
+          });
+          
+          updateDashboard();
+          renderEvents(filterEvents());
+          refreshIcon.classList.remove("animate-spin");
+        }, 500);
+      });
+
+      clearBtn.addEventListener("click", () => {
+        new Audio('https://assets.mixkit.co/sfx/preview/mixkit-camera-shutter-click-1133.mp3').play();
+        
+        events = [];
+        faceCount = 0;
+        alertCount = 0;
+        renderEvents(events);
+        updateDashboard();
+      });
+
+      eventTypeFilter.addEventListener("change", () => {
+        renderEvents(filterEvents());
+        
+        new Audio('https://assets.mixkit.co/sfx/preview/mixkit-modern-technology-select-2522.mp3').play();
+      });
+
+      setInterval(simulateWebhookReceive, 7000);
+
+      // --- UI Functionality ---
+      const commandCenter = document.getElementById("command-center"); // Get command center element
+      const mainContentContainer = document.getElementById("main-content"); // Parent for perspective
+
+      // --- Command Center 3D Tilt Logic ---
+      const tiltIntensity = 8; // How much tilt (degrees) - adjust as needed
+
+      commandCenter.addEventListener('mousemove', (e) => {
+          const rect = commandCenter.getBoundingClientRect();
+          const x = e.clientX - rect.left; // x position within the element.
+          const y = e.clientY - rect.top;  // y position within the element.
+
+          const centerX = rect.width / 2;
+          const centerY = rect.height / 2;
+
+          const deltaX = (x - centerX) / centerX; // -1 to 1
+          const deltaY = (y - centerY) / centerY; // -1 to 1
+
+          const rotateY = deltaX * tiltIntensity;
+          const rotateX = -deltaY * tiltIntensity; // Invert Y for natural tilt
+
+          gsap.to(commandCenter, {
+              duration: 0.6, // Slightly longer duration for smoother effect
+              rotationX: rotateX,
+              rotationY: rotateY,
+              ease: "power2.out" // Smooth easing
+          });
+      });
+
+      commandCenter.addEventListener('mouseleave', () => {
+          gsap.to(commandCenter, {
+              duration: 0.8, // Longer duration for smooth reset
+              rotationX: 0,
+              rotationY: 0,
+              ease: "elastic.out(1, 0.75)" // Bouncy reset effect
+          });
+      });
+      
+      // --- Screenshot Modal Functionality ---
+      const modal = document.getElementById("screenshotModal");
+      const closeModal = document.querySelector(".close-modal");
+      const screenshotImage = document.getElementById("screenshotImage");
+      const screenshotPlaceholder = document.getElementById("screenshotPlaceholder");
+      const eventTypeDisplay = document.getElementById("eventType");
+      const eventTimeDisplay = document.getElementById("eventTime");
+      const eventDetailsDisplay = document.getElementById("eventDetails");
+      
+      closeModal.addEventListener("click", () => {
+        modal.style.display = "none";
+        screenshotImage.style.display = "none";
+        screenshotPlaceholder.style.display = "block";
+      });
+      
+      window.addEventListener("click", (event) => {
+        if (event.target === modal) {
+          modal.style.display = "none";
+        }
+      });
+      
+      function showEventDetails(event) {
+        // Set modal content
+        eventTypeDisplay.textContent = event.type.replace(/_/g, ' ').toUpperCase();
+        eventTimeDisplay.textContent = new Date(event.timestamp).toLocaleString();
+        eventDetailsDisplay.textContent = formatEventDetails(event);
+        
+        // Check for screenshot and display if available
+        if (event.screenshot) {
+          screenshotImage.src = event.screenshot;
+          screenshotImage.style.display = "block";
+          screenshotPlaceholder.style.display = "none";
+        } else {
+          screenshotImage.style.display = "none";
+          screenshotPlaceholder.style.display = "block";
+        }
+        
+        // Show the modal
+        modal.style.display = "block";
+      }
+
+      // --- Update the fetch events function to work with real data ---
+      function fetchEvents() {
+        fetch('/events')
+          .then(response => response.json())
+          .then(data => {
+            events = data;
+            
+            // Update dashboard indicators based on events
+            faceCount = 0;
+            alertCount = 0;
+            isFlying = false;
+            batteryValue = "--";
+            isConnected = true;
+            
+            events.forEach(event => {
+              // Same logic as before to update dashboard
+              switch (event.type) {
+                case "face_detected":
+                case "face_locked":
+                  faceCount++;
+                  break;
+                case "takeoff":
+                  isFlying = true;
+                  break;
+                case "land":
+                case "emergency_stop":
+                  isFlying = false;
+                  break;
+                case "drone_connected":
+                case "simulator_started":
+                  isConnected = true;
+                  if (event.data && event.data.battery) {
+                    batteryValue = event.data.battery + "%";
+                  }
+                  break;
+                case "connection_error":
+                case "critical_error":
+                  alertCount++;
+                  break;
+                case "low_battery":
+                  if (event.data && event.data.level) {
+                    batteryValue = event.data.level + "%";
+                  }
+                  alertCount++;
+                  break;
+                case "shutdown":
+                  isConnected = false;
+                  break;
+              }
+            });
+            
+            updateDashboard();
+            renderEvents(filterEvents());
+            
+          })
+          .catch(error => {
+            console.error('Error fetching events:', error);
+            isConnected = false;
+            updateDashboard();
+          });
+      }
+
+      // --- Update autoRefreshToggle to use real events ---
+      function setupEventRefresh() {
+        if (document.getElementById("autoRefreshToggle").checked) {
+          fetchEvents();
+        }
+      }
+
+      // Set intervals and initialize
+      setInterval(updateTimestamp, 1000);
+      setInterval(setupEventRefresh, 5000);
+      updateTimestamp();
+      
+      // Initial events fetch
+      setTimeout(() => {
+        fetchEvents();
+      }, 1000);
+
+    </script>
+  </body>
+</html>
