@@ -1,10 +1,21 @@
 import { useState } from 'react';
-import { Text, View, Image, TouchableOpacity, Modal, Pressable } from 'react-native';
+import { Text, View, Image, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { darkBg, cardBg, accent, textPrimary, textSecondary, border } from '../theme';
+
+interface Device {
+  id: string;
+  name: string;
+  image: string;
+  battery: number;
+  status: string;
+  options: string[];
+}
 
 export const HomeScreen = ({ username = "Pranav" }) => {
-  const [selectedDevice, setSelectedDevice] = useState(null);
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   
-  const devices = [
+  const devices: Device[] = [
     {
       id: 'core',
       name: 'MARLOW CORE',
@@ -23,7 +34,7 @@ export const HomeScreen = ({ username = "Pranav" }) => {
     }
   ];
 
-  const openBottomSheet = (device) => {
+  const openBottomSheet = (device: Device) => {
     setSelectedDevice(device);
   };
 
@@ -31,60 +42,91 @@ export const HomeScreen = ({ username = "Pranav" }) => {
     setSelectedDevice(null);
   };
 
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: darkBg, padding: 24 },
+    headerText: { color: accent, fontSize: 24, fontWeight: '300', marginTop: 40 },
+    greetingText: { color: accent, fontSize: 32, marginTop: 32 },
+    aiSection: { marginTop: 32 },
+    aiTitle: { color: accent, fontSize: 20, fontWeight: 'bold' },
+    aiText: { color: textPrimary, fontSize: 18, marginTop: 8 },
+    deviceSection: { marginTop: 48 },
+    deviceTitle: { color: accent, fontSize: 20 },
+    deviceCard: { borderColor: border, borderWidth: 1, borderRadius: 8, padding: 16, flexDirection: 'row', alignItems: 'center', marginTop: 16 },
+    deviceImage: { width: 80, height: 80 },
+    deviceInfo: { flex: 1, alignItems: 'flex-end' },
+    deviceName: { color: accent, fontSize: 18, fontWeight: 'bold' },
+    deviceBattery: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    deviceBatteryBar: { width: 48, height: 8, borderRadius: 4, backgroundColor: border },
+    deviceBatteryLevel: { color: accent, marginLeft: 8 },
+    bottomSheetModal: { flex: 1, backgroundColor: darkBg, opacity: 0.5 },
+    bottomSheet: { backgroundColor: darkBg, borderRadius: 24, position: 'absolute', bottom: 0, width: '100%', padding: 24 },
+    bottomSheetDivider: { width: 64, height: 4, borderRadius: 2, backgroundColor: border, alignSelf: 'center', marginBottom: 24 },
+    bottomSheetDeviceInfo: { flexDirection: 'row', marginBottom: 24 },
+    bottomSheetDeviceImage: { width: 96, height: 96, borderRadius: 12 },
+    bottomSheetDeviceText: { marginLeft: 16, justifyContent: 'center' },
+    bottomSheetDeviceName: { color: accent, fontSize: 18, fontWeight: 'bold' },
+    bottomSheetDeviceStatus: { color: textSecondary },
+    bottomSheetDeviceBattery: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    bottomSheetDeviceBatteryBar: { width: 64, height: 8, borderRadius: 4, backgroundColor: border },
+    bottomSheetDeviceBatteryLevel: { color: accent, marginLeft: 8 },
+    bottomSheetOptions: { borderBottomColor: border, borderBottomWidth: 1 },
+    bottomSheetOption: { paddingVertical: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    bottomSheetOptionText: { color: accent, fontSize: 16 },
+  });
+
   return (
-    <View className="flex-1 bg-black p-6">
+    <SafeAreaView style={styles.container}>
       {/* Header */}
-      <Text className="text-white text-3xl font-light mt-10">MARLOW<Text className="font-bold">OS</Text></Text>
+      <Text style={styles.headerText}>MARLOW<Text style={{ fontWeight: 'bold' }}>OS</Text></Text>
       
       {/* Greeting */}
-      <Text className="text-white text-4xl mt-8">Hello <Text className="font-bold">{username}</Text></Text>
+      <Text style={styles.greetingText}>Hello <Text style={{ fontWeight: 'bold' }}>{username}</Text></Text>
       
       {/* AI Section */}
-      <View className="mt-8">
-        <Text className="text-white text-2xl">MARLOW<Text className="font-bold">AI</Text></Text>
-        <Text className="text-white text-xl mt-2">You will be presenting at <Text className="font-bold">Bitcamp</Text> in a few weeks.</Text>
+      <View style={styles.aiSection}>
+        <Text style={styles.aiTitle}>MARLOW<Text style={{ fontWeight: 'bold' }}>AI</Text></Text>
+        <Text style={styles.aiText}>You will be presenting at <Text style={{ fontWeight: 'bold' }}>Bitcamp</Text> in a few weeks.</Text>
         
-        <View className="flex-row items-center mt-6">
-          <View className="flex-1">
-            <Text className="text-white text-xl">
-              I've learned to recognize Abhinav Byreddy and Aaftab Jafri. You can utilize <Text className="text-cyan-400 font-medium">Marlow Falcon</Text> to track them in a proximity near you.
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 24 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: textPrimary, fontSize: 18 }}>
+              I've learned to recognize Abhinav Byreddy and Aaftab Jafri. You can utilize <Text style={{ color: accent, fontWeight: '500' }}>Marlow Falcon</Text> to track them in a proximity near you.
             </Text>
           </View>
-          <View className="flex-row ml-2">
-            <View className="w-16 h-16 rounded-full bg-purple-700 items-center justify-center border-2 border-white">
-              <Text className="text-white text-xl font-bold">AB</Text>
+          <View style={{ flexDirection: 'row', marginLeft: 8 }}>
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#7A0BC0', justifyContent: 'center', alignItems: 'center', borderColor: '#FFFFFF', borderWidth: 2 }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>AB</Text>
             </View>
-            <View className="w-16 h-16 rounded-full bg-blue-700 items-center justify-center border-2 border-white -ml-4">
-              <Text className="text-white text-xl font-bold">AJ</Text>
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#3498DB', justifyContent: 'center', alignItems: 'center', borderColor: '#FFFFFF', borderWidth: 2, marginLeft: -16 }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>AJ</Text>
             </View>
           </View>
         </View>
       </View>
       
       {/* Devices Section */}
-      <Text className="text-white text-2xl mt-12">DEVICES</Text>
+      <Text style={styles.deviceTitle}>DEVICES</Text>
       
-      {devices.map(device => (
+      {devices.map((device, index) => (
         <TouchableOpacity 
           key={device.id}
-          className="mt-4 border border-gray-700 rounded-lg p-4 flex-row items-center"
+          style={styles.deviceCard}
           onPress={() => openBottomSheet(device)}
         >
           <Image 
             source={{ uri: device.image }} 
-            className="w-20 h-20" 
+            style={styles.deviceImage} 
             resizeMode="contain"
           />
-          <View className="flex-1 items-end">
-            <Text className="text-white text-xl font-bold">{device.name}</Text>
-            <View className="flex-row items-center mt-1">
-              <View className="w-12 h-2 bg-gray-800 rounded-full">
+          <View style={styles.deviceInfo}>
+            <Text style={styles.deviceName}>{device.name}</Text>
+            <View style={styles.deviceBattery}>
+              <View style={styles.deviceBatteryBar}>
                 <View 
-                  className={`h-2 rounded-full ${device.battery >= 70 ? 'bg-green-500' : 'bg-yellow-400'}`} 
-                  style={{ width: `${device.battery}%` }} 
+                  style={{ height: 8, borderRadius: 4, backgroundColor: device.battery >= 70 ? accent : textSecondary, width: `${device.battery}%` }} 
                 />
               </View>
-              <Text className="text-white ml-2">{device.battery}%</Text>
+              <Text style={styles.deviceBatteryLevel}>{device.battery}%</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -98,49 +140,47 @@ export const HomeScreen = ({ username = "Pranav" }) => {
         onRequestClose={closeBottomSheet}
       >
         <Pressable 
-          className="flex-1 bg-black/50"
+          style={styles.bottomSheetModal}
           onPress={closeBottomSheet}
         >
           <Pressable 
-            className="bg-zinc-900 rounded-t-3xl absolute bottom-0 w-full p-6"
-            style={{ height: '60%' }}
+            style={styles.bottomSheet}
             onPress={e => e.stopPropagation()}
           >
             {selectedDevice && (
               <>
-                <View className="w-16 h-1 bg-gray-500 rounded-full self-center mb-6" />
+                <View style={styles.bottomSheetDivider} />
                 
-                <View className="flex-row mb-6">
+                <View style={styles.bottomSheetDeviceInfo}>
                   <Image 
                     source={{ uri: selectedDevice.image }} 
-                    className="w-24 h-24 rounded-lg" 
+                    style={styles.bottomSheetDeviceImage} 
                     resizeMode="contain"
                   />
-                  <View className="ml-4 justify-center">
-                    <Text className="text-white text-2xl font-bold">{selectedDevice.name}</Text>
-                    <Text className="text-gray-400">Status: {selectedDevice.status}</Text>
-                    <View className="flex-row items-center mt-1">
-                      <View className="w-16 h-2 bg-gray-800 rounded-full">
+                  <View style={styles.bottomSheetDeviceText}>
+                    <Text style={styles.bottomSheetDeviceName}>{selectedDevice.name}</Text>
+                    <Text style={styles.bottomSheetDeviceStatus}>Status: {selectedDevice.status}</Text>
+                    <View style={styles.bottomSheetDeviceBattery}>
+                      <View style={styles.bottomSheetDeviceBatteryBar}>
                         <View 
-                          className={`h-2 rounded-full ${selectedDevice.battery >= 70 ? 'bg-green-500' : 'bg-yellow-400'}`} 
-                          style={{ width: `${selectedDevice.battery}%` }} 
+                          style={{ height: 8, borderRadius: 4, backgroundColor: selectedDevice.battery >= 70 ? accent : textSecondary, width: `${selectedDevice.battery}%` }} 
                         />
                       </View>
-                      <Text className="text-white ml-2">{selectedDevice.battery}%</Text>
+                      <Text style={styles.bottomSheetDeviceBatteryLevel}>{selectedDevice.battery}%</Text>
                     </View>
                   </View>
                 </View>
 
-                <Text className="text-white text-lg mb-4">Configuration Options</Text>
+                <Text style={{ color: accent, fontSize: 16, marginBottom: 16 }}>Configuration Options</Text>
                 
-                <View className="divide-y divide-gray-800">
+                <View style={styles.bottomSheetOptions}>
                   {selectedDevice.options.map((option, index) => (
                     <TouchableOpacity 
                       key={index}
-                      className="py-4 flex-row justify-between items-center"
+                      style={styles.bottomSheetOption}
                     >
-                      <Text className="text-white text-lg">{option}</Text>
-                      <Text className="text-gray-500">›</Text>
+                      <Text style={styles.bottomSheetOptionText}>{option}</Text>
+                      <Text style={{ color: textSecondary }}>›</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -149,6 +189,6 @@ export const HomeScreen = ({ username = "Pranav" }) => {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }; 

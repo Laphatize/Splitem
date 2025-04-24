@@ -1,93 +1,70 @@
-import { HomeScreen } from 'components/HomeScreen';
-import { ChatScreen } from 'components/ChatScreen';
-import { DevicesScreen } from 'components/DevicesScreen';
-import { SettingsScreen } from 'components/SettingsScreen';
-import { StatusBar } from 'expo-status-bar';
-import { View, Text, TouchableOpacity } from 'react-native';
-import { useState } from 'react';
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { useColorScheme } from 'react-native';
+import AuthScreen from './components/AuthScreen';
+import DashboardScreen from './components/DashboardScreen';
+import BillSplitterScreen from './components/BillSplitterScreen';
+import BillSplitResultsModal from './components/BillSplitResultsModal';
+import BankLinkScreen from './components/BankLinkScreen';
+import NotificationsScreen from './components/NotificationsScreen';
+import ChatScreen from './components/ChatScreen';
+import InsightsScreen from './components/InsightsScreen';
+import AIAssistantScreen from './components/AIAssistantScreen';
 import { Ionicons } from '@expo/vector-icons';
+import { darkBg, cardBg, accent, textPrimary } from './theme';
 
 import './global.css';
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState('home');
-  
-  const renderScreen = () => {
-    switch (activeTab) {
-      case 'home':
-        return <HomeScreen />;
-      case 'devices':
-        return <DevicesScreen />;
-      case 'chat':
-        return <ChatScreen />;
-      case 'settings':
-        return <SettingsScreen />;
-      default:
-        return <HomeScreen />;
-    }
-  };
-  
-  return (
-    <>
-      <View className="flex-1">
-        {renderScreen()}
-        
-        {/* Bottom Navigation */}
-        <View className="bg-zinc-900 border-t border-zinc-800 pb-6 pt-2 flex-row justify-around">
-          <TabButton 
-            icon="home" 
-            label="Home" 
-            active={activeTab === 'home'} 
-            onPress={() => setActiveTab('home')} 
-          />
-          <TabButton 
-            icon="hardware-chip" 
-            label="Devices" 
-            active={activeTab === 'devices'} 
-            onPress={() => setActiveTab('devices')} 
-          />
-          <TabButton 
-            icon="chatbubble" 
-            label="Chat" 
-            active={activeTab === 'chat'} 
-            onPress={() => setActiveTab('chat')} 
-          />
-          <TabButton 
-            icon="settings" 
-            label="Settings" 
-            active={activeTab === 'settings'} 
-            onPress={() => setActiveTab('settings')} 
-          />
-        </View>
-      </View>
-      <StatusBar style="light" />
-    </>
-  );
-}
+const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator();
 
-interface TabButtonProps {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}
-
-const TabButton = ({ icon, label, active, onPress }: TabButtonProps) => {
-  const iconName = active ? icon : `${icon}-outline` as keyof typeof Ionicons.glyphMap;
-  
+function MainTabs({ route }: { route: any }) {
+  const { user, token } = route.params || {};
   return (
-    <TouchableOpacity 
-      className="items-center justify-center" 
-      onPress={onPress}
+    <Tab.Navigator
+      screenOptions={({ route }: { route: any }) => ({
+        headerShown: false,
+        tabBarStyle: { backgroundColor: cardBg, borderTopColor: darkBg, height: 64 },
+        tabBarActiveTintColor: accent,
+        tabBarInactiveTintColor: textPrimary,
+        tabBarIcon: ({ color, size }: { color: string; size: number }) => {
+          let iconName: any;
+          if (route.name === 'Dashboard') iconName = 'home-outline';
+          else if (route.name === 'Insights') iconName = 'bar-chart-outline';
+          else if (route.name === 'BillSplitter') iconName = 'calculator-outline';
+          else if (route.name === 'Assistant') iconName = 'sparkles-outline';
+          else if (route.name === 'Chat') iconName = 'chatbubble-ellipses-outline';
+          else if (route.name === 'Notifications') iconName = 'notifications-outline';
+          else iconName = 'ellipse-outline';
+          return <Ionicons name={iconName as any} size={size} color={color} />;
+        },
+      })}
     >
-      <Ionicons 
-        name={iconName}
-        size={24} 
-        color={active ? '#00FFFF' : '#888888'} 
-      />
-      <Text className={`text-xs mt-1 ${active ? 'text-cyan-400' : 'text-gray-500'}`}>
-        {label}
-      </Text>
-    </TouchableOpacity>
+      <Tab.Screen name="Dashboard" component={DashboardScreen} initialParams={{ user, token }} />
+      <Tab.Screen name="Insights" component={InsightsScreen} initialParams={{ user, token }} />
+      <Tab.Screen name="BillSplitter" component={BillSplitterScreen} initialParams={{ user, token }} />
+      <Tab.Screen name="Assistant" component={AIAssistantScreen} initialParams={{ user, token }} />
+      <Tab.Screen name="Chat" component={ChatScreen} />
+      <Tab.Screen name="Notifications" component={NotificationsScreen} />
+    </Tab.Navigator>
   );
-};
+}
+
+export default function App() {
+  const scheme = useColorScheme();
+  return (
+    <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <NavigationContainer theme={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack.Navigator initialRouteName="Auth" screenOptions={{ headerShown: true }}>
+          <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
+          <Stack.Screen name="BillSplitResults" component={BillSplitResultsModal} options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="BankLink" component={BankLinkScreen} options={{ headerShown: false }} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </ThemeProvider>
+  );
+}

@@ -1,0 +1,15 @@
+# Use the official MongoDB image from Docker Hub
+FROM mongo:7.0
+
+# Expose the default MongoDB port
+EXPOSE 27017
+
+# Optional: Add a default database and user (uncomment if needed)
+# ENV MONGO_INITDB_ROOT_USERNAME=admin
+# ENV MONGO_INITDB_ROOT_PASSWORD=adminpassword
+# ENV MONGO_INITDB_DATABASE=fintech
+
+# Optional: Copy custom initialization scripts
+# COPY ./init-mongo.js /docker-entrypoint-initdb.d/
+
+# No custom entrypoint needed; use default
